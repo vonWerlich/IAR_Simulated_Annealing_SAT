@@ -7,13 +7,14 @@
 
 #define SA_MAX 1 //número de vizinhos analisados //30 funciona bem
 //1 é o padrão da maioria dos algoritmos
-#define N 12500 //numero de iterações total 
+#define N 5000 //numero de iterações total 
 #define T0 100
 #define Tn 0.001
 #define K 1.0 //constante de Bolzmann -> quanto maior, maior probabilidade de aceitação
               // -> quanto menor, menor a probabilidade de aceitação
 
 #define MAX_ALTERACOES 2
+#define BOXPLOT_NUM 30
 
 typedef struct {
     int indices[300]; // no máximo dois índices modificados
@@ -221,7 +222,7 @@ Alteracao gerarVizinho1(bool *vizinho, const bool *solucao) {
         vizinho[i] = solucao[i];
     }
 
-    int metodo = rand() % 2; //escolhe um dos dois
+    int metodo = rand() % 2;
 
     if (metodo == 0) {
 	
@@ -321,104 +322,116 @@ int main () {// nessa versão analisa todos os vizinhos e se decide pelo melhor e
 	srand(time(NULL));
 	
 	//"uf20-01.cnf"
-	//"uf100-01.cnf"
-	const char *nomearquivo = "uf250-01.cnf";
+	//"uf250-01.cnf"
+	const char *nomearquivo = "uf100-01.cnf";
 	read_cnf_file(nomearquivo);
 	
-	int melhor_global = num_clauses;
-	
-	
-	//printf("%d\n", num_vars);
-	double T=T0;
-	
-	// Inicializar solução aleatória
-	bool *solution = criarVetor(num_vars);
-    for (int i = 0; i < num_vars; i++) {
-        solution[i] = rand() % 2;
-    }
-    //printVetorBool(solution, num_vars); //teste aleatoriedade
-    bool *vizinho = criarVetor(num_vars); // apenas uma vez
-	
-	int i = 1; //iterações decaimento temperatura
-	
-	int currentValue;//numero de erros agora
-	
-	FILE *saida = fopen("saida.csv", "w");
+	FILE *saida = fopen("saida_boxplot_2.txt", "a");
 		if (saida == NULL) {
 			perror("Erro ao criar o arquivo de saída");
 			exit(1);
 		}
+		
+
 	
-	while (T > Tn) {
-		//printf("\n%d", i);
-		currentValue = evaluate(solution);
-		////printf("%d", currentValue);
-		int iterations = 0;
-		while (iterations < SA_MAX) {
-			//printf("%d", iterations);
-			iterations++;
-			Alteracao alt = gerarVizinho0(vizinho, solution);//gerar vizinho
-			//printVetorBool(vizinho, num_vars);  //teste se a geração está funcionando
-			int valueVizinho = evaluate(vizinho);
-			
-			int delta = valueVizinho - currentValue;//calcular delta entre performance atual e performance anterior
-			
-			if (delta < 0) {// if delta < 0 then Tcurrent = newT
-				for (int k = 0; k < alt.count; k++) {
-			        solution[alt.indices[k]] = vizinho[alt.indices[k]];
-			    }
-				currentValue = valueVizinho;
-				if (valueVizinho < melhor_global) {
-					melhor_global = valueVizinho;//if f(newT) < f(Tcurrent) then melhor global = newT
-					if (melhor_global == 0) {
-						break;
-					}
-					//break;
-				}
-			} else {// else probabilidade e^alguma coisa (aceitar solução pior)
-				double pPior = exp(-delta/(K * T));
-				double r = (double)rand() / RAND_MAX;
-				if (r < pPior) {
+	int c = 1;
+	while(c < (BOXPLOT_NUM + 1)){
+		int melhor_global = num_clauses;
+		
+			FILE *saida = fopen("saida.csv", "w");
+			if (saida == NULL) {
+				perror("Erro ao criar o arquivo de saída");
+				exit(1);
+			}
+		//printf("%d\n", num_vars);
+		double T=T0;
+		
+		// Inicializar solução aleatória
+		bool *solution = criarVetor(num_vars);
+	    for (int i = 0; i < num_vars; i++) {
+	        solution[i] = rand() % 2;
+	    }
+	    //printVetorBool(solution, num_vars); //teste aleatoriedade
+	    bool *vizinho = criarVetor(num_vars); // apenas uma vez
+		
+		int i = 1; //iterações decaimento temperatura
+		
+		int currentValue;//numero de erros agora
+		
+		
+		while (T > Tn && i <= N) {
+			//printf("\n%d", i);
+			currentValue = evaluate(solution);
+			////printf("%d", currentValue);
+			int iterations = 0;
+			while (iterations < SA_MAX) {
+				//printf("%d", iterations);
+				iterations++;
+				Alteracao alt = gerarVizinho2(vizinho, solution);//gerar vizinho
+				//printVetorBool(vizinho, num_vars);  //teste se a geração está funcionando
+				int valueVizinho = evaluate(vizinho);
+				
+				int delta = valueVizinho - currentValue;//calcular delta entre performance atual e performance anterior
+				
+				if (delta < 0) {// if delta < 0 then Tcurrent = newT
 					for (int k = 0; k < alt.count; k++) {
 				        solution[alt.indices[k]] = vizinho[alt.indices[k]];
 				    }
 					currentValue = valueVizinho;
+					if (valueVizinho < melhor_global) {
+						melhor_global = valueVizinho;//if f(newT) < f(Tcurrent) then melhor global = newT
+						if (melhor_global == 0) {
+							break;
+						}
+						//break;
+					}
+				} else {// else probabilidade e^alguma coisa (aceitar solução pior)
+					double pPior = exp(-delta/(K * T));
+					double r = (double)rand() / RAND_MAX;
+					if (r < pPior) {
+						for (int k = 0; k < alt.count; k++) {
+					        solution[alt.indices[k]] = vizinho[alt.indices[k]];
+					    }
+						currentValue = valueVizinho;
+					}
 				}
+				
+				//fprintf(saida, "%d,%.6f,%d,%d\n", i, T, currentValue, melhor_global); // Salva os dados
+			}
+			////printf("%d", currentValue);
+			//fprintf(saida, "%d,%.6f,%d,%d\n", i, T, currentValue, melhor_global);
+			if (melhor_global == 0) {
+				break;
 			}
 			
-			//fprintf(saida, "%d,%.6f,%d,%d\n", i, T, currentValue, melhor_global); // Salva os dados
+			//T = T * 0.999; //-> diminui rápido d+
+			T = coolingSchedule2(i, T); // nova temperatura
+			
+			i++;
+			if (i % 100 == 0) {
+				float k = (100.0 * i) / N;
+			    printf("%.2f%% Completos\n", k);
+			}
+			iterations = 0;
+			
 		}
-		////printf("%d", currentValue);
-		fprintf(saida, "%d,%.6f,%d,%d\n", i, T, currentValue, melhor_global);
-		if (melhor_global == 0) {
-			break;
-		}
+		fprintf(saida, "%d\n", currentValue);
+		free(vizinho);
 		
-		//T = pow(1.0 - ((double)i / (double)N), 1); //t = fator de resfriamento. Admissível, por exemplo entre 1 e 5.
-		//T = T * 0.999; //-> diminui rápido d+
-		T = coolingSchedule2(i, T); // nova temperatura
 		
-		i++;
-		if (i % 100 == 0) {
-			float k = (100.0 * i) / N;
-		    printf("%.2f%% Completos\n", k);
-		}
-		iterations = 0;
-		
+		free(solution);
+		c++;
 	}
-	free(vizinho);
 	
 	fclose(saida);
-	
 	//print melhor global;
 	
-	printf("\n%d\n", currentValue);
+	//printf("\n%d\n", currentValue);
 	
-	//system("python --version");
-	system("python Simulated_Annealing-SAT.py");
+	//system("python Simulated_Annealing-SAT-boxplot.py");
 	
 	
-	free(solution);
+	
 	//bool teste[20] = {true, false, false, true, false, false, false, true, false, true, false, false, true, true, true, false, true, false, false, true};
 	
 	free(arquivoLido);
